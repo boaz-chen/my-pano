@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e3a5f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>פנו דרך — לוח אימונים</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --primary: #1e3a5f;
+      --primary-light: #2a4f7f;
+      --accent: #16a34a;
+      --accent-bg: #f0fdf4;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+      --shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: #1e293b;
+      min-height: 100vh;
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: white;
+      text-align: center;
+      padding: 1.8rem 1rem 1.4rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+    }
+    header h1 {
+      font-size: 1.5rem;
+      margin-bottom: .25rem;
+      letter-spacing: -.02em;
+    }
+    header p {
+      color: rgba(255,255,255,.75);
+      font-size: .85rem;
+    }
+
+    main {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 1rem .75rem 6rem;
+    }
+
+    /* status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      font-size: .82rem;
+      color: var(--muted);
+    }
+    .status-bar.error { color: #dc2626; }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .dot { color: var(--accent); font-size: 1.2rem; line-height: 1; }
+
+    /* schedule title */
+    #schedule-title {
+      text-align: center;
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--primary);
+    }
+
+    /* day cards */
+    .day-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      margin-bottom: .75rem;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .day-header {
+      background: var(--primary);
+      color: white;
+      padding: .65rem 1rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .day-header .day-icon { font-size: 1.1rem; }
+
+    .sessions { padding: .25rem 0; }
+
+    .session {
+      display: flex;
+      align-items: flex-start;
+      gap: .75rem;
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .session:last-child { border-bottom: none; }
+
+    .session-time {
+      background: var(--accent-bg);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: .9rem;
+      padding: .25rem .5rem;
+      border-radius: 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 52px;
+      text-align: center;
+    }
+    .session-details { flex: 1; min-width: 0; }
+    .session-group {
+      font-weight: 600;
+      font-size: .92rem;
+      line-height: 1.4;
+    }
+    .session-location {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: .2rem;
+    }
+
+    /* floating refresh button */
+    #refresh-btn {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: .7rem 1.8rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(30,58,95,.35);
+      z-index: 20;
+      transition: opacity .2s, transform .2s;
+      display: none;
+    }
+    #refresh-btn:active { transform: translateX(-50%) scale(.95); }
+    #refresh-btn:disabled { opacity: .5; }
+
+    /* countdown in footer */
+    footer {
+      text-align: center;
+      padding: .5rem 1rem;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+
+    /* pull-to-refresh hint */
+    @media (max-width: 640px) {
+      main { padding: .75rem .5rem 6rem; }
+      .day-card { border-radius: 14px; }
+      .session { padding: .7rem .85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏃 פנו דרך</h1>
+  <p>לוח אימונים שבועי — מעודכן בזמן אמת</p>
+</header>
+
+<main>
+  <div id="status" class="status-bar"><span class="spinner"></span> טוען לוח אימונים…</div>
+  <h2 id="schedule-title"></h2>
+  <div id="schedule"></div>
+</main>
+
+<button id="refresh-btn">🔄 רענן</button>
+
+<footer>
+  <span id="countdown"></span><br/>
+  נתונים מ-<a href="https://panuderech.vercel.app/#schedule">panuderech.vercel.app</a>
+</footer>
+
+<script>
+const PROXY_URL = "https://r.jina.ai/https://panuderech.vercel.app/";
+const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const DAY_ICONS = {"ראשון":"א׳","שני":"ב׳","שלישי":"ג׳","רביעי":"ד׳","חמישי":"ה׳","שישי":"ו׳","שבת":"ש׳"};
+const TIME_RE = /^(\d{1,2}:\d{2})\s*[-–]\s*(.+)/;
+const REFRESH_MINUTES = 30;
+
+let refreshTimer = null;
+let countdownTimer = null;
+let nextRefresh = null;
+
+function parseSchedule(markdown) {
+  const titleMatch = markdown.match(/^(לוח אימונים.+)$/m);
+  const title = titleMatch ? titleMatch[1].trim() : "";
+  const lines = markdown.split("\n");
+  const days = [];
+  let current = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const headerMatch = trimmed.match(/^###\s+(.+)/);
+    if (headerMatch && DAYS.includes(headerMatch[1].trim())) {
+      if (current) days.push(current);
+      current = { day: headerMatch[1].trim(), sessions: [] };
+      continue;
+    }
+    if (!current) continue;
+    const timeMatch = trimmed.match(TIME_RE);
+    if (timeMatch) {
+      current.sessions.push({ time: timeMatch[1], group: timeMatch[2].trim(), location: "" });
+      continue;
+    }
+    if (trimmed && current.sessions.length > 0) {
+      const last = current.sessions[current.sessions.length - 1];
+      if (!last.location && !trimmed.startsWith("#") && !trimmed.startsWith("---") && !trimmed.startsWith("![")) {
+        last.location = trimmed;
+      }
+    }
+  }
+  if (current) days.push(current);
+  return { title, days };
+}
+
+function render(data) {
+  document.getElementById("schedule-title").textContent = data.title;
+  const container = document.getElementById("schedule");
+  container.innerHTML = "";
+
+  for (const day of data.days) {
+    const card = document.createElement("div");
+    card.className = "day-card";
+    const icon = DAY_ICONS[day.day] || "";
+    let html = `<div class="day-header"><span class="day-icon">📅</span> ${esc(day.day)}</div><div class="sessions">`;
+    for (const s of day.sessions) {
+      html += `<div class="session">
+        <span class="session-time">${esc(s.time)}</span>
+        <div class="session-details">
+          <div class="session-group">${esc(s.group)}</div>
+          ${s.location ? `<div class="session-location">📍 ${esc(s.location)}</div>` : ""}
+        </div>
+      </div>`;
+    }
+    html += "</div>";
+    card.innerHTML = html;
+    container.appendChild(card);
+  }
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function startCountdown() {
+  clearInterval(countdownTimer);
+  nextRefresh = Date.now() + REFRESH_MINUTES * 60 * 1000;
+  const el = document.getElementById("countdown");
+  countdownTimer = setInterval(() => {
+    const left = Math.max(0, Math.round((nextRefresh - Date.now()) / 1000));
+    const m = Math.floor(left / 60);
+    const s = String(left % 60).padStart(2, "0");
+    el.textContent = `רענון אוטומטי בעוד ${m}:${s}`;
+    if (left <= 0) { clearInterval(countdownTimer); load(); }
+  }, 1000);
+}
+
+async function load() {
+  clearTimeout(refreshTimer);
+  clearInterval(countdownTimer);
+
+  const status = document.getElementById("status");
+  const btn = document.getElementById("refresh-btn");
+  btn.disabled = true;
+  status.className = "status-bar";
+  status.innerHTML = '<span class="spinner"></span> טוען לוח אימונים…';
+  status.style.display = "flex";
+
+  try {
+    const res = await fetch(PROXY_URL, { headers: { Accept: "text/markdown" } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = parseSchedule(await res.text());
+    if (data.days.length === 0) throw new Error("לא נמצאו אימונים");
+
+    render(data);
+    const now = new Date().toLocaleString("he-IL", { hour:"2-digit", minute:"2-digit" });
+    status.innerHTML = `<span class="dot">●</span> עודכן ${now}`;
+  } catch (e) {
+    status.className = "status-bar error";
+    status.textContent = `שגיאה: ${e.message}`;
+  }
+
+  btn.style.display = "block";
+  btn.disabled = false;
+  startCountdown();
+}
+
+document.getElementById("refresh-btn").addEventListener("click", load);
+load();
+</script>
+</body>
+</html>
