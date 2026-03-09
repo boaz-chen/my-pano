@@ -199,52 +199,13 @@
 <button id="refresh-btn">🔄 רענן</button>
 
 <footer>
-  <span id="countdown"></span><br/>
+  <div id="update-info"></div>
   נתונים מ-<a href="https://panuderech.vercel.app/#schedule">panuderech.vercel.app</a>
 </footer>
 
 <script>
-const PROXY_URL = "https://r.jina.ai/https://panuderech.vercel.app/";
-const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
-const DAY_ICONS = {"ראשון":"א׳","שני":"ב׳","שלישי":"ג׳","רביעי":"ד׳","חמישי":"ה׳","שישי":"ו׳","שבת":"ש׳"};
-const TIME_RE = /^(\d{1,2}:\d{2})\s*[-–]\s*(.+)/;
-const REFRESH_MINUTES = 30;
-
-let refreshTimer = null;
-let countdownTimer = null;
-let nextRefresh = null;
-
-function parseSchedule(markdown) {
-  const titleMatch = markdown.match(/^(לוח אימונים.+)$/m);
-  const title = titleMatch ? titleMatch[1].trim() : "";
-  const lines = markdown.split("\n");
-  const days = [];
-  let current = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const headerMatch = trimmed.match(/^###\s+(.+)/);
-    if (headerMatch && DAYS.includes(headerMatch[1].trim())) {
-      if (current) days.push(current);
-      current = { day: headerMatch[1].trim(), sessions: [] };
-      continue;
-    }
-    if (!current) continue;
-    const timeMatch = trimmed.match(TIME_RE);
-    if (timeMatch) {
-      current.sessions.push({ time: timeMatch[1], group: timeMatch[2].trim(), location: "" });
-      continue;
-    }
-    if (trimmed && current.sessions.length > 0) {
-      const last = current.sessions[current.sessions.length - 1];
-      if (!last.location && !trimmed.startsWith("#") && !trimmed.startsWith("---") && !trimmed.startsWith("![")) {
-        last.location = trimmed;
-      }
-    }
-  }
-  if (current) days.push(current);
-  return { title, days };
-}
+const SCHEDULE_URL = "schedule.json";
+const REFRESH_INTERVAL_MS = 60 * 1000; // check every minute for staleness display
 
 function render(data) {
   document.getElementById("schedule-title").textContent = data.title;
@@ -254,7 +215,6 @@ function render(data) {
   for (const day of data.days) {
     const card = document.createElement("div");
     card.className = "day-card";
-    const icon = DAY_ICONS[day.day] || "";
     let html = `<div class="day-header"><span class="day-icon">📅</span> ${esc(day.day)}</div><div class="sessions">`;
     for (const s of day.sessions) {
       html += `<div class="session">
@@ -277,23 +237,31 @@ function esc(s) {
   return d.innerHTML;
 }
 
-function startCountdown() {
-  clearInterval(countdownTimer);
-  nextRefresh = Date.now() + REFRESH_MINUTES * 60 * 1000;
-  const el = document.getElementById("countdown");
-  countdownTimer = setInterval(() => {
-    const left = Math.max(0, Math.round((nextRefresh - Date.now()) / 1000));
-    const m = Math.floor(left / 60);
-    const s = String(left % 60).padStart(2, "0");
-    el.textContent = `רענון אוטומטי בעוד ${m}:${s}`;
-    if (left <= 0) { clearInterval(countdownTimer); load(); }
-  }, 1000);
+function formatHe(date) {
+  return date.toLocaleString("he-IL", {
+    day: "numeric", month: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 }
 
-async function load() {
-  clearTimeout(refreshTimer);
-  clearInterval(countdownTimer);
+function updateTimestamps(scrapedAt) {
+  const el = document.getElementById("update-info");
+  const scraped = new Date(scrapedAt);
+  const next = new Date(scraped.getTime() + 60 * 60 * 1000); // +1 hour
+  const now = new Date();
+  const diffMin = Math.round((now - scraped) / 60000);
 
+  let ago;
+  if (diffMin < 1) ago = "עכשיו";
+  else if (diffMin < 60) ago = `לפני ${diffMin} דקות`;
+  else ago = `לפני ${Math.floor(diffMin / 60)} שעות`;
+
+  el.innerHTML = `עודכן: ${formatHe(scraped)} (${ago}) · עדכון הבא: ${formatHe(next)}`;
+}
+
+let lastScrapedAt = null;
+
+async function load() {
   const status = document.getElementById("status");
   const btn = document.getElementById("refresh-btn");
   btn.disabled = true;
@@ -302,14 +270,15 @@ async function load() {
   status.style.display = "flex";
 
   try {
-    const res = await fetch(PROXY_URL, { headers: { Accept: "text/markdown" } });
+    const res = await fetch(SCHEDULE_URL + "?t=" + Date.now());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = parseSchedule(await res.text());
-    if (data.days.length === 0) throw new Error("לא נמצאו אימונים");
+    const data = await res.json();
+    if (!data.days || data.days.length === 0) throw new Error("לא נמצאו אימונים");
 
     render(data);
-    const now = new Date().toLocaleString("he-IL", { hour:"2-digit", minute:"2-digit" });
-    status.innerHTML = `<span class="dot">●</span> עודכן ${now}`;
+    lastScrapedAt = data.scraped_at;
+    updateTimestamps(lastScrapedAt);
+    status.innerHTML = '<span class="dot">●</span> מעודכן';
   } catch (e) {
     status.className = "status-bar error";
     status.textContent = `שגיאה: ${e.message}`;
@@ -317,8 +286,12 @@ async function load() {
 
   btn.style.display = "block";
   btn.disabled = false;
-  startCountdown();
 }
+
+// Keep the "ago" text fresh
+setInterval(() => {
+  if (lastScrapedAt) updateTimestamps(lastScrapedAt);
+}, REFRESH_INTERVAL_MS);
 
 document.getElementById("refresh-btn").addEventListener("click", load);
 load();
