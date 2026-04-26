@@ -210,24 +210,28 @@ const HE_DAY_INDEX = {
   "חמישי": 4, "שישי": 5, "שבת": 6,
 };
 
-// Parse a schedule title like "לוח אימונים שבועי 8-14.3" → {startDay, endDay, month}.
-// Returns null if the title doesn't carry a recognizable date range.
+// Parse a schedule title → {startDay, month} (and optionally endDay).
+// Handles two formats:
+//   cross-month "26.4-2.5"  (startDay.startMonth-endDay.endMonth)
+//   same-month  "8-14.3"    (startDay-endDay.month)
+// Returns null if no recognizable date range is found.
 function parseWeekRange(title) {
   if (!title) return null;
-  const m = title.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})\.(\d{1,2})/);
+  let m = title.match(/(\d{1,2})\.(\d{1,2})\s*[-–]\s*\d{1,2}\.\d{1,2}/);
+  if (m) return { startDay: +m[1], month: +m[2] };
+  m = title.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})\.(\d{1,2})/);
   if (!m) return null;
   return { startDay: +m[1], endDay: +m[2], month: +m[3] };
 }
 
 // Compute the calendar date for a given Hebrew day name within a parsed week.
-// Relies on JS Date auto-normalizing day overflow (e.g. March 36 → April 5),
+// Relies on JS Date auto-normalizing day overflow (e.g. April 31 → May 1),
 // and shifts year if the result drifts more than ~6 months from today.
-function dateForDay(dayName, range) {
+function dateForDay(dayName, range, today = new Date()) {
   if (!range) return null;
   const idx = HE_DAY_INDEX[dayName];
   if (idx === undefined) return null;
 
-  const today = new Date();
   const year = today.getFullYear();
   const day = range.startDay + idx;
 

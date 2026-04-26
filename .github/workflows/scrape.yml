@@ -23,6 +23,9 @@ jobs:
           pip install playwright
           playwright install chromium --with-deps
 
+      - name: Run tests
+        run: node --input-type=module < test.js
+
       - name: Scrape schedule
         run: python scrape.py
 
